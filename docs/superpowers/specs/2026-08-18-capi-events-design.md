@@ -15,7 +15,7 @@ credentials, and authenticated public API endpoints.
 |---|---|
 | Where do CAPI creds live? | Columns on `whatsapp_config` (already one-row-per-account, already stores encrypted Meta tokens). No new table. |
 | Settings UI placement | Section inside the existing WhatsApp settings panel (`whatsapp-config.tsx`). No new settings tab. |
-| Who can fire events in the UI? | Any account member. Creds editing stays admin-only (existing WhatsApp config gating). |
+| Who can fire events in the UI? | Agent role and above (viewers are read-only; firing is an external write). UI hides/disables the buttons for viewers. Creds editing stays admin-only (existing WhatsApp config gating). Amended 2026-08-19 by eng review D15. |
 | Graph API version | Reuse the repo's single `v21.0` pin from `src/lib/whatsapp/meta-api.ts`. |
 | Qualify confirm dialog | `window.confirm` (repo's plain-confirm pattern; no inputs needed). Convert uses a controlled `Dialog` because it collects inputs. |
 | Phone hashing input | `normalizePhone()` from `src/lib/whatsapp/phone-utils.ts` (digits-only incl. country code) — matches Meta's `ph` normalization spec. SHA-256 hex via `node:crypto`. |
