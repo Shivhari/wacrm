@@ -49,22 +49,27 @@ interface FireResponse {
   code?: string;
 }
 
-// Mount with `key={contact.id}` from the parent (both call sites below do).
-// That remounts this component whenever the selected contact changes, so
-// the `useState` initializers below re-read fresh `qualified_at` /
-// `converted_at` values instead of needing an effect to resync them —
-// simpler, and compiler-safe (no ref reads/writes during render).
+// Mount with `key={contact.id}` from the parent (both call sites below do,
+// belt-and-braces) — but the source of truth for the fired-state timestamps
+// is the derived `qualifiedAt`/`convertedAt` below, not component identity.
+// A successful fire sets a local override; absent an override we read
+// straight from the `contact` prop, so a parent-driven prop update for the
+// SAME contact id (e.g. the detail Sheet re-fetching) is picked up on the
+// very next render — no effect, no ref access during render needed.
 export function CapiActions({ contact }: { contact: Contact }) {
   const t = useTranslations('Contacts.capi');
 
   // Local overrides so a successful fire flips the UI without the
-  // parent re-fetching the contact row.
-  const [qualifiedAt, setQualifiedAt] = useState<string | null>(
-    contact.qualified_at ?? null
+  // parent re-fetching the contact row. `null` means "no override yet" —
+  // fall back to the prop's value, which stays live for prop updates.
+  const [qualifiedOverride, setQualifiedOverride] = useState<string | null>(
+    null
   );
-  const [convertedAt, setConvertedAt] = useState<string | null>(
-    contact.converted_at ?? null
+  const [convertedOverride, setConvertedOverride] = useState<string | null>(
+    null
   );
+  const qualifiedAt = qualifiedOverride ?? contact.qualified_at ?? null;
+  const convertedAt = convertedOverride ?? contact.converted_at ?? null;
   const [capiReady, setCapiReady] = useState<boolean | null>(null);
   const [firing, setFiring] = useState<'qualify' | 'convert' | null>(null);
 
@@ -121,7 +126,7 @@ export function CapiActions({ contact }: { contact: Contact }) {
     const result = await fire({ kind: 'qualify', refire });
     setFiring(null);
     if (result) {
-      setQualifiedAt(result.fired_at);
+      setQualifiedOverride(result.fired_at);
       toast.success(t('qualifiedToast'));
     }
   }
@@ -158,7 +163,7 @@ export function CapiActions({ contact }: { contact: Contact }) {
     });
     setFiring(null);
     if (result) {
-      setConvertedAt(result.fired_at);
+      setConvertedOverride(result.fired_at);
       setConvertOpen(false);
       toast.success(t('convertedToast'));
     }
