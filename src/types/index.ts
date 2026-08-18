@@ -108,6 +108,15 @@ export interface Contact {
   email?: string;
   company?: string;
   avatar_url?: string;
+  /** Latest click-to-WhatsApp click id from an inbound message's
+   *  referral object (migration 040). NULL = never arrived via a CTWA
+   *  ad; CAPI qualify/convert are blocked without it. */
+  ctwa_clid?: string | null;
+  ctwa_clid_captured_at?: string | null;
+  /** Set on the last successful CAPI Lead fire ("Mark qualified"). */
+  qualified_at?: string | null;
+  /** Set on the last successful CAPI Purchase/Schedule fire. */
+  converted_at?: string | null;
   created_at: string;
   updated_at: string;
   /** Hydrated by queries that embed `contact_tags(tags(*))` (e.g. the
