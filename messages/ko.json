@@ -498,6 +498,33 @@
       "toastRenameFailed": "필드 이름을 변경할 수 없습니다.",
       "toastDeleteFailed": "필드를 삭제할 수 없습니다.",
       "toastDeleted": "\"{name}\"을(를) 삭제했습니다."
+    },
+    "capi": {
+      "sectionTitle": "전환",
+      "markQualified": "적격으로 표시",
+      "markConverted": "전환으로 표시",
+      "firing": "전송 중…",
+      "fireAgain": "다시 전송",
+      "fireEvent": "이벤트 전송",
+      "qualifiedAt": "{date} 적격 처리됨",
+      "convertedAt": "{date} 전환 처리됨",
+      "qualifiedToast": "Lead 이벤트가 Meta로 전송되었습니다",
+      "convertedToast": "전환 이벤트가 Meta로 전송되었습니다",
+      "fireFailed": "이벤트 전송에 실패했습니다 — 다시 시도하세요",
+      "confirmQualify": "이 연락처의 Lead 이벤트를 Meta로 전송할까요?",
+      "confirmQualifyAgain": "새 이벤트 ID로 Lead 이벤트를 다시 전송할까요?",
+      "convertTitle": "전환으로 표시",
+      "convertAgainTitle": "전환 이벤트 다시 전송",
+      "convertDesc": "이 연락처의 클릭 ID와 함께 전환 이벤트를 Meta 데이터셋으로 전송합니다.",
+      "eventName": "이벤트",
+      "value": "금액",
+      "optional": "(선택)",
+      "currency": "통화",
+      "cancel": "취소",
+      "invalidValue": "금액은 0 이상의 숫자여야 합니다",
+      "invalidCurrency": "통화는 3자리 코드여야 합니다 (예: INR)",
+      "noClidHint": "클릭 ID가 없습니다 — 이 연락처는 클릭 투 WhatsApp 광고를 통해 유입되지 않았습니다.",
+      "noCredsHint": "CAPI 자격 증명이 설정되지 않았습니다. 설정 → WhatsApp에서 설정하세요."
     }
   },
   "Pipelines": {

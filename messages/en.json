@@ -498,6 +498,33 @@
       "toastRenameFailed": "Could not rename field.",
       "toastDeleteFailed": "Could not delete field.",
       "toastDeleted": "Deleted \"{name}\"."
+    },
+    "capi": {
+      "sectionTitle": "Conversions",
+      "markQualified": "Mark qualified",
+      "markConverted": "Mark converted",
+      "firing": "Sending…",
+      "fireAgain": "Fire again",
+      "fireEvent": "Fire event",
+      "qualifiedAt": "Qualified {date}",
+      "convertedAt": "Converted {date}",
+      "qualifiedToast": "Lead event sent to Meta",
+      "convertedToast": "Conversion event sent to Meta",
+      "fireFailed": "Failed to send the event — try again",
+      "confirmQualify": "Send a Lead event to Meta for this contact?",
+      "confirmQualifyAgain": "Send the Lead event again with a new event id?",
+      "convertTitle": "Mark converted",
+      "convertAgainTitle": "Fire conversion again",
+      "convertDesc": "Sends a conversion event with this contact's click id to your Meta dataset.",
+      "eventName": "Event",
+      "value": "Value",
+      "optional": "(optional)",
+      "currency": "Currency",
+      "cancel": "Cancel",
+      "invalidValue": "Value must be a non-negative number",
+      "invalidCurrency": "Currency must be a 3-letter code (e.g. INR)",
+      "noClidHint": "No click id captured — this contact didn't arrive through a click-to-WhatsApp ad.",
+      "noCredsHint": "CAPI credentials are not configured. Set them in Settings → WhatsApp."
     }
   },
   "Pipelines": {

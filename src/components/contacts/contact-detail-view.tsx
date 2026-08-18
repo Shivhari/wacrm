@@ -11,6 +11,7 @@ import {
   TemplatePicker,
   type TemplateSendValues,
 } from '@/components/inbox/template-picker';
+import { CapiActions } from '@/components/capi/capi-actions';
 import {
   Sheet,
   SheetContent,
@@ -534,6 +535,12 @@ export function ContactDetailView({
                     )}
                     {t('saveChangesBtn')}
                   </Button>
+
+                  {/* Divider */}
+                  <div className="my-1 border-t border-border" />
+
+                  {/* CAPI conversion actions */}
+                  <CapiActions key={contact.id} contact={contact} />
                 </div>
               </TabsContent>
 

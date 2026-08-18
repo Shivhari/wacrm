@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import type { Contact, Deal, ContactNote, Tag } from "@/types";
+import { CapiActions } from "@/components/capi/capi-actions";
 import {
   Phone,
   Mail,
@@ -250,6 +251,12 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
               )}
             </div>
           </div>
+
+          {/* Divider */}
+          <div className="my-4 border-t border-border" />
+
+          {/* CAPI conversion actions */}
+          <CapiActions key={contact.id} contact={contact} />
 
           {/* Divider */}
           <div className="my-4 border-t border-border" />
