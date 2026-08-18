@@ -72,13 +72,17 @@ export async function fireCapiEvent(
 ): Promise<FireCapiResult> {
   const { supabase, accountId, contactId, kind } = options
 
-  const { data: contact } = await supabase
+  const { data: contact, error: contactError } = await supabase
     .from('contacts')
     .select('id, phone, ctwa_clid, qualified_at, converted_at')
     .eq('id', contactId)
     .eq('account_id', accountId)
     .maybeSingle()
 
+  if (contactError) {
+    console.error('[capi] contact read failed:', contactError)
+    throw new FireCapiError('internal', 'Failed to load contact')
+  }
   if (!contact) {
     throw new FireCapiError('contact_not_found', 'Contact not found')
   }
@@ -97,12 +101,16 @@ export async function fireCapiEvent(
     )
   }
 
-  const { data: config } = await supabase
+  const { data: config, error: configError } = await supabase
     .from('whatsapp_config')
     .select('capi_dataset_id, capi_access_token, capi_test_event_code')
     .eq('account_id', accountId)
     .maybeSingle()
 
+  if (configError) {
+    console.error('[capi] config read failed:', configError)
+    throw new FireCapiError('internal', 'Failed to load CAPI configuration')
+  }
   if (!config?.capi_dataset_id || !config?.capi_access_token) {
     throw new FireCapiError(
       'no_capi_credentials',

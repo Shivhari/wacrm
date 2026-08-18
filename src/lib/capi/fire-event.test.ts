@@ -40,6 +40,8 @@ function makeSupabase(state: {
   inserted: Record<string, unknown>[];
   updated: Record<string, unknown>[];
   insertError?: { message: string } | null;
+  contactReadError?: { message: string } | null;
+  configReadError?: { message: string } | null;
 }) {
   return {
     from(table: string) {
@@ -48,8 +50,12 @@ function makeSupabase(state: {
       chain.select = self;
       chain.eq = self;
       chain.maybeSingle = async () => {
-        if (table === 'contacts') return { data: state.contact, error: null };
-        if (table === 'whatsapp_config') return { data: state.config, error: null };
+        if (table === 'contacts') {
+          return { data: state.contactReadError ? null : state.contact, error: state.contactReadError ?? null };
+        }
+        if (table === 'whatsapp_config') {
+          return { data: state.configReadError ? null : state.config, error: state.configReadError ?? null };
+        }
         return { data: null, error: null };
       };
       chain.insert = (row: Record<string, unknown>) => {
@@ -163,6 +169,28 @@ describe('fireCapiEvent guards', () => {
     });
     expect(result.eventId).toMatch(/^[0-9a-f-]{36}$/);
     expect(mocks.sendCapiEvent).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('fireCapiEvent DB read failures', () => {
+  it('surfaces a contact read failure as an internal error, not contact_not_found', async () => {
+    const state = { ...baseState(), contactReadError: { message: 'connection reset' } };
+    await expectFireError(
+      fireCapiEvent(baseOptions(makeSupabase(state))),
+      'internal',
+      500
+    );
+    expect(mocks.sendCapiEvent).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a config read failure as an internal error, not no_capi_credentials', async () => {
+    const state = { ...baseState(), configReadError: { message: 'connection reset' } };
+    await expectFireError(
+      fireCapiEvent(baseOptions(makeSupabase(state))),
+      'internal',
+      500
+    );
+    expect(mocks.sendCapiEvent).not.toHaveBeenCalled();
   });
 });
 
