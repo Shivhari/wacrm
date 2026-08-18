@@ -60,4 +60,11 @@ describe('SCOPE_DESCRIPTIONS', () => {
       expect(SCOPE_DESCRIPTIONS[s]).toBeTruthy();
     }
   });
+
+  it('includes the CAPI qualify/convert scopes', () => {
+    expect(API_SCOPES).toContain('contacts:qualify');
+    expect(API_SCOPES).toContain('contacts:convert');
+    expect(SCOPE_DESCRIPTIONS['contacts:qualify']).toBeTruthy();
+    expect(SCOPE_DESCRIPTIONS['contacts:convert']).toBeTruthy();
+  });
 });
