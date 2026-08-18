@@ -67,7 +67,7 @@ function makeSupabase(state: {
 
 function baseState() {
   return {
-    contact: { ...CONTACT },
+    contact: { ...CONTACT } as typeof CONTACT | null,
     config: { ...CONFIG },
     inserted: [] as Record<string, unknown>[],
     updated: [] as Record<string, unknown>[],
