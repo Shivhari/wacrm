@@ -1538,6 +1538,24 @@
       "step4_5": "\"messages\" 웹훅 필드를 구독",
       "metaDocs": "Meta WhatsApp API 문서"
     },
+    "capi": {
+      "title": "Meta 전환 API",
+      "description": "클릭 투 WhatsApp 연락처의 Lead 및 Purchase 이벤트를 Meta 데이터셋으로 전송합니다.",
+      "connectFirst": "먼저 위에서 WhatsApp을 연결하세요 — 전환 이벤트에는 수신 웹훅이 필요합니다.",
+      "datasetId": "데이터셋(픽셀) ID",
+      "datasetIdPlaceholder": "예: 1234567890",
+      "accessToken": "CAPI 액세스 토큰",
+      "tokenPlaceholder": "전환 API 토큰을 붙여넣으세요",
+      "tokenSavedPlaceholder": "••••••••  (토큰 저장됨)",
+      "tokenSavedHint": "토큰이 저장되어 있습니다. 유지하려면 비워 두고, 교체하려면 새 토큰을 붙여넣으세요.",
+      "testEventCode": "테스트 이벤트 코드 (선택)",
+      "testEventCodePlaceholder": "예: TEST12345",
+      "testEventCodeHint": "설정하면 이벤트가 Events Manager 테스트 모드로 전송됩니다. 지우면 실제 전송됩니다.",
+      "save": "CAPI 설정 저장",
+      "saving": "저장 중…",
+      "saved": "CAPI 설정이 저장되었습니다",
+      "saveFailed": "CAPI 설정 저장에 실패했습니다"
+    },
     "sections": {
       "overview": "개요",
       "profile": "내 프로필",

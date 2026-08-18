@@ -1538,6 +1538,24 @@
       "step4_5": "Subscribe to \"messages\" webhook field",
       "metaDocs": "Meta WhatsApp API Documentation"
     },
+    "capi": {
+      "title": "Meta Conversions API",
+      "description": "Send Lead and Purchase events for click-to-WhatsApp contacts to your Meta dataset.",
+      "connectFirst": "Connect WhatsApp above first — conversion events need the inbound webhook.",
+      "datasetId": "Dataset (Pixel) ID",
+      "datasetIdPlaceholder": "e.g. 1234567890",
+      "accessToken": "CAPI access token",
+      "tokenPlaceholder": "Paste your Conversions API token",
+      "tokenSavedPlaceholder": "••••••••  (token saved)",
+      "tokenSavedHint": "A token is saved. Leave blank to keep it; paste a new one to replace it.",
+      "testEventCode": "Test event code (optional)",
+      "testEventCodePlaceholder": "e.g. TEST12345",
+      "testEventCodeHint": "When set, events land in Events Manager test mode. Clear it to go live.",
+      "save": "Save CAPI settings",
+      "saving": "Saving…",
+      "saved": "CAPI settings saved",
+      "saveFailed": "Failed to save CAPI settings"
+    },
     "sections": {
       "overview": "Overview",
       "profile": "Your profile",

@@ -24,6 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { SettingsPanelHead } from './settings-panel-head';
+import { CapiSettingsSection } from './capi-settings-section';
 import {
   Accordion,
   AccordionItem,
@@ -915,6 +916,14 @@ export function WhatsAppConfig() {
           </CardContent>
         </Card>
       </div>
+    </div>
+
+    {/* Meta Conversions API credentials — separate row + verbs
+        (see route comment) from the WhatsApp connection above, so
+        it lives in its own card at the bottom of the panel rather
+        than the two-column grid. */}
+    <div className="mt-6">
+      <CapiSettingsSection isAdmin={canEditSettings} />
     </div>
     </section>
   );
