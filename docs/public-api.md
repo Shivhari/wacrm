@@ -50,6 +50,8 @@ it. Grant the minimum.
 | `conversations:read` | List and read conversations              |
 | `broadcasts:send`    | Launch broadcast campaigns               |
 | `webhooks:manage`    | Register and manage outbound webhooks    |
+| `contacts:qualify`   | Fire a Meta CAPI `Lead` event for a contact |
+| `contacts:convert`   | Fire a Meta CAPI `Purchase`/`Schedule` event for a contact |
 
 A key with **no scopes** still authenticates and can call
 `GET /api/v1/me` — useful for verifying a key works.
@@ -262,6 +264,71 @@ Invalid phone numbers are dropped and counted as `rejected`. Response
 Broadcast status + counts. Scope: `broadcasts:send`. `status` moves
 `sending` → `sent`; `delivered_count` / `read_count` keep climbing as
 Meta delivery webhooks arrive. `404` for another account's broadcast.
+
+### `POST /api/v1/contacts/{id}/qualify`
+
+Fire a Meta Conversions API **`Lead`** event for a contact — the same
+action as the dashboard's "Mark qualified" button. Scope:
+`contacts:qualify`. This tier always fires `Lead`; there is no
+`event_name` field.
+
+Body:
+
+```jsonc
+{ "refire": false }   // optional; pass true to send again after an earlier fire
+```
+
+Response (200):
+
+```json
+{
+  "data": {
+    "event_id": "…",
+    "event_name": "Lead",
+    "fired_at": "2026-08-18T10:00:00.000Z"
+  }
+}
+```
+
+### `POST /api/v1/contacts/{id}/convert`
+
+Fire a Meta Conversions API conversion event for a contact — the same
+action as the dashboard's "Mark converted" button. Scope:
+`contacts:convert`.
+
+Body:
+
+```jsonc
+{
+  "event_name": "Purchase",   // optional; "Purchase" (default) or "Schedule". "Lead" is not valid here — that's the qualify tier.
+  "value": 1500,               // optional; a non-negative finite number
+  "currency": "INR",           // optional 3-letter ISO code, uppercased on receipt; defaults to INR when value is present
+  "refire": false              // optional; pass true to send again after an earlier fire
+}
+```
+
+Response (200):
+
+```json
+{
+  "data": {
+    "event_id": "…",
+    "event_name": "Purchase",
+    "fired_at": "2026-08-18T10:00:00.000Z"
+  }
+}
+```
+
+**Errors for both endpoints** — beyond the table above:
+
+| Status | `code`                | Meaning                                                       |
+| ------ | --------------------- | -------------------------------------------------------------- |
+| 400    | `bad_request`         | Malformed `event_name` / `value` / `currency`                  |
+| 404    | `contact_not_found`   | The contact doesn't exist, or belongs to another account       |
+| 409    | `already_fired`       | The contact is already marked qualified/converted; pass `refire: true` to send again |
+| 422    | `no_ctwa_clid`        | The contact has no captured click id — CAPI events are blocked |
+| 422    | `no_capi_credentials` | CAPI credentials aren't configured for this account            |
+| 502    | `meta_error`          | The request reached Meta and Meta rejected it                  |
 
 ## Pagination
 
