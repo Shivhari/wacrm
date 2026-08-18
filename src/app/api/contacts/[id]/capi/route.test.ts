@@ -112,6 +112,40 @@ describe('POST /api/contacts/[id]/capi', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejects a negative value on a convert', async () => {
+    const res = await POST(
+      request({ kind: 'convert', value: -5 }),
+      params
+    );
+    expect(res.status).toBe(400);
+    expect(mocks.fireCapiEvent).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-numeric value on a convert', async () => {
+    const res = await POST(
+      request({ kind: 'convert', value: 'x' }),
+      params
+    );
+    expect(res.status).toBe(400);
+    expect(mocks.fireCapiEvent).not.toHaveBeenCalled();
+  });
+
+  it('rejects a malformed currency on a convert', async () => {
+    const res = await POST(
+      request({ kind: 'convert', currency: 'RUPEES' }),
+      params
+    );
+    expect(res.status).toBe(400);
+    expect(mocks.fireCapiEvent).not.toHaveBeenCalled();
+  });
+
+  it('passes refire through to fireCapiEvent on a qualify', async () => {
+    await POST(request({ kind: 'qualify', refire: true }), params);
+    expect(mocks.fireCapiEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'qualify', refire: true })
+    );
+  });
+
   it('maps FireCapiError to { error, code } with its status', async () => {
     mocks.fireCapiEvent.mockRejectedValue(
       new FireCapiError('no_capi_credentials', 'not configured')

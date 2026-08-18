@@ -42,6 +42,7 @@ function makeSupabase(state: {
   insertError?: { message: string } | null;
   contactReadError?: { message: string } | null;
   configReadError?: { message: string } | null;
+  stampError?: { message: string } | null;
 }) {
   return {
     from(table: string) {
@@ -64,7 +65,11 @@ function makeSupabase(state: {
       };
       chain.update = (row: Record<string, unknown>) => {
         state.updated.push({ table, ...row });
-        return { eq: () => ({ eq: () => Promise.resolve({ error: null }) }) };
+        return {
+          eq: () => ({
+            eq: () => Promise.resolve({ error: state.stampError ?? null }),
+          }),
+        };
       };
       return chain;
     },
@@ -254,5 +259,46 @@ describe('fireCapiEvent Meta failure', () => {
       error: 'Invalid OAuth access token',
     });
     expect(state.updated).toHaveLength(0);
+  });
+});
+
+describe('fireCapiEvent audit/stamp failure resilience', () => {
+  it('still resolves and stamps the contact when the success audit insert fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const state = { ...baseState(), insertError: { message: 'insert failed' } };
+    const result = await fireCapiEvent(baseOptions(makeSupabase(state)));
+
+    expect(result.eventId).toMatch(/^[0-9a-f-]{36}$/);
+    const stamp = state.updated.find((r) => r.table === 'contacts');
+    expect(stamp?.qualified_at).toBe(result.firedAt);
+  });
+
+  it('defaults currency to INR when value is present but currency is omitted', async () => {
+    const state = baseState();
+    await fireCapiEvent({
+      ...baseOptions(makeSupabase(state)),
+      kind: 'convert',
+      eventName: 'Purchase',
+      value: 250,
+    });
+
+    const sent = mocks.sendCapiEvent.mock.calls[0][0];
+    expect(sent.currency).toBe('INR');
+
+    const audit = state.inserted.find((r) => r.table === 'capi_events');
+    expect(audit).toMatchObject({ value: 250, currency: 'INR' });
+  });
+
+  it('surfaces internal/500 when the contact stamp update fails after a successful send, but keeps the success audit row', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const state = { ...baseState(), stampError: { message: 'update failed' } };
+    await expectFireError(
+      fireCapiEvent(baseOptions(makeSupabase(state))),
+      'internal',
+      500
+    );
+
+    const audit = state.inserted.find((r) => r.table === 'capi_events');
+    expect(audit).toMatchObject({ status: 'success' });
   });
 });

@@ -96,6 +96,13 @@ describe('POST /api/v1/contacts/{id}/convert', () => {
     expect(res.status).toBe(400);
   });
 
+  it('passes refire through to fireCapiEvent', async () => {
+    await POST(request({ refire: true }), params);
+    expect(mocks.fireCapiEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ refire: true })
+    );
+  });
+
   it('maps FireCapiError onto the envelope', async () => {
     mocks.fireCapiEvent.mockRejectedValue(
       new FireCapiError('no_ctwa_clid', 'no clid')
