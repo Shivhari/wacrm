@@ -70,6 +70,20 @@ interface WhatsAppMessage {
   button?: { text?: string; payload?: string }
   /** Present when the customer swipe-replies to one of our messages. */
   context?: { id: string }
+  /**
+   * Present when this message originated from a click-to-WhatsApp ad.
+   * ctwa_clid is the attribution key for Meta Conversions API events
+   * (migration 040) — captured silently onto the contact; nothing is
+   * fired automatically.
+   */
+  referral?: {
+    source_url?: string
+    source_type?: string
+    source_id?: string
+    headline?: string
+    body?: string
+    ctwa_clid?: string
+  }
 }
 
 interface WhatsAppWebhookEntry {
@@ -600,6 +614,23 @@ async function processMessage(
   )
   if (!contactOutcome) return
   const contactRecord = contactOutcome.contact
+
+  // Silent ctwa_clid capture (spec: docs/product/features/capi-events.md).
+  // Newest message wins — an unconditional overwrite, by design. Failure
+  // must never break message processing, so errors only log.
+  const ctwaClid = message.referral?.ctwa_clid
+  if (ctwaClid) {
+    const { error: clidError } = await supabaseAdmin()
+      .from('contacts')
+      .update({
+        ctwa_clid: ctwaClid,
+        ctwa_clid_captured_at: new Date().toISOString(),
+      })
+      .eq('id', contactRecord.id)
+    if (clidError) {
+      console.error('[webhook] ctwa_clid capture failed:', clidError.message)
+    }
+  }
 
   // Find or create conversation
   const convResult = await findOrCreateConversation(

@@ -29,6 +29,10 @@ const h = vi.hoisted(() => ({
     }[],
     /** Error the next storage upload resolves with, if any. */
     storageUploadError: null as { message: string } | null,
+    /** Calls made to `contacts`'s update() — the ctwa_clid capture. */
+    contactsUpdateCalls: [] as { row: Record<string, unknown>; id: string }[],
+    /** Error the next contacts update resolves with, if any. */
+    contactsUpdateError: null as { message: string } | null,
   },
 }))
 
@@ -135,6 +139,16 @@ vi.mock('@supabase/supabase-js', () => ({
                   }),
               }
             },
+          }
+        case 'contacts':
+          // ctwa_clid capture: update({...}).eq('id', contactId)
+          return {
+            update: (row: Record<string, unknown>) => ({
+              eq: (_col: string, id: string) => {
+                h.state.contactsUpdateCalls.push({ row, id })
+                return Promise.resolve({ error: h.state.contactsUpdateError })
+              },
+            }),
           }
         default:
           throw new Error(`unexpected table: ${table}`)
@@ -260,6 +274,8 @@ beforeEach(() => {
   h.state.mirrorInboundMedia = true
   h.state.storageUploads = []
   h.state.storageUploadError = null
+  h.state.contactsUpdateCalls = []
+  h.state.contactsUpdateError = null
   mockGetMediaUrl.mockResolvedValue({
     url: 'https://lookaside.fbsbx.com/whatsapp/abc',
     mimeType: 'image/jpeg',
@@ -524,6 +540,60 @@ describe('inbound webhook: inbound media is mirrored (#466)', () => {
     expect(mockGetMediaUrl).not.toHaveBeenCalled()
     expect(h.state.storageUploads).toHaveLength(0)
     expect(h.state.upsertCalls[0].row).toMatchObject({ media_type: null })
+  })
+})
+
+describe('inbound webhook: ctwa_clid capture (Task 7)', () => {
+  const AD_MESSAGE = {
+    ...TEXT_MESSAGE,
+    referral: {
+      ctwa_clid: 'test-clid-123',
+      source_type: 'ad',
+      source_id: '120212345678901234',
+      headline: 'Chat with us',
+    },
+  }
+
+  it('captures ctwa_clid onto the contact when referral is present', async () => {
+    await runWebhook(AD_MESSAGE)
+
+    expect(h.state.contactsUpdateCalls).toHaveLength(1)
+    expect(h.state.contactsUpdateCalls[0].id).toBe('contact-1')
+    expect(h.state.contactsUpdateCalls[0].row).toMatchObject({
+      ctwa_clid: 'test-clid-123',
+    })
+    expect(h.state.contactsUpdateCalls[0].row.ctwa_clid_captured_at).toEqual(
+      expect.any(String),
+    )
+  })
+
+  it('overwrites unconditionally with the newest ctwa_clid', async () => {
+    await runWebhook({
+      ...TEXT_MESSAGE,
+      referral: { ...AD_MESSAGE.referral, ctwa_clid: 'newer-clid' },
+    })
+
+    expect(h.state.contactsUpdateCalls).toHaveLength(1)
+    expect(h.state.contactsUpdateCalls[0].row).toMatchObject({
+      ctwa_clid: 'newer-clid',
+    })
+  })
+
+  it('does not touch contacts when there is no referral', async () => {
+    await runWebhook()
+
+    expect(h.state.contactsUpdateCalls).toHaveLength(0)
+  })
+
+  it('never breaks message processing when the capture update errors', async () => {
+    h.state.contactsUpdateError = { message: 'db unavailable' }
+
+    const res = await runWebhook(AD_MESSAGE)
+
+    expect((res as { init?: { status?: number } }).init?.status ?? 200).toBe(
+      200,
+    )
+    expect(h.state.upsertCalls).toHaveLength(1)
   })
 })
 
