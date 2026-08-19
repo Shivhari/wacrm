@@ -25,6 +25,12 @@ export interface CapiLogEntry {
   outcome: 'success' | 'failed'
   /** Absent when the request itself failed (network error). */
   httpStatus?: number
+  /**
+   * Parsed Meta response body when one arrived. On success this holds
+   * events_received / messages / fbtrace_id — a 200 can still carry
+   * warnings in `messages`, so keep the whole thing.
+   */
+  response?: unknown
   /** Meta or network error message when outcome is 'failed'. */
   error?: string
 }

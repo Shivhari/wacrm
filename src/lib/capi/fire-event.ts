@@ -103,7 +103,7 @@ export async function fireCapiEvent(
 
   const { data: config, error: configError } = await supabase
     .from('whatsapp_config')
-    .select('capi_dataset_id, capi_access_token, capi_test_event_code')
+    .select('capi_dataset_id, capi_access_token, capi_test_event_code, waba_id')
     .eq('account_id', accountId)
     .maybeSingle()
 
@@ -156,6 +156,7 @@ export async function fireCapiEvent(
       value: options.value,
       currency: options.value !== undefined ? (options.currency ?? 'INR') : undefined,
       testEventCode: config.capi_test_event_code,
+      wabaId: config.waba_id,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown Meta CAPI error'

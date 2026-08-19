@@ -65,6 +65,20 @@ describe('sendCapiEvent', () => {
     expect(body.data[0]).not.toHaveProperty('custom_data');
     // no test code configured → key absent, not null
     expect(body).not.toHaveProperty('test_event_code');
+    // no wabaId given → key absent from user_data
+    expect(body.data[0].user_data).not.toHaveProperty('whatsapp_business_account_id');
+    // integration identifier always present at the root
+    expect(body.partner_agent).toBe('wacrm');
+  });
+
+  it('includes whatsapp_business_account_id in user_data when wabaId is provided', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse());
+    vi.stubGlobal('fetch', fetchMock);
+
+    await sendCapiEvent({ ...BASE_OPTIONS, wabaId: 'waba-77' });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.data[0].user_data.whatsapp_business_account_id).toBe('waba-77');
   });
 
   it('includes custom_data and test_event_code when provided', async () => {
@@ -110,7 +124,19 @@ describe('sendCapiEvent', () => {
   });
 
   it('logs the exact payload with a success outcome, never the token', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okResponse()));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            events_received: 1,
+            messages: ['Warning: event_time older than 7 days'],
+            fbtrace_id: 'trace-1',
+          }),
+          { status: 200 }
+        )
+      )
+    );
 
     await sendCapiEvent({ ...BASE_OPTIONS, testEventCode: 'TEST123' });
 
@@ -122,6 +148,12 @@ describe('sendCapiEvent', () => {
     expect(entry.httpStatus).toBe(200);
     expect(entry.body.data[0].event_id).toBe(BASE_OPTIONS.eventId);
     expect(entry.body.test_event_code).toBe('TEST123');
+    // full Meta response captured — a 200 can still carry warnings
+    expect(entry.response).toEqual({
+      events_received: 1,
+      messages: ['Warning: event_time older than 7 days'],
+      fbtrace_id: 'trace-1',
+    });
     expect(JSON.stringify(entry)).not.toContain('token-abc');
   });
 
@@ -143,6 +175,10 @@ describe('sendCapiEvent', () => {
     expect(entry.httpStatus).toBe(401);
     expect(entry.error).toBe('Invalid OAuth access token');
     expect(entry.body.data[0].user_data.ctwa_clid).toBe('clid-xyz');
+    // Meta error body captured too (carries fbtrace_id for support)
+    expect(entry.response).toEqual({
+      error: { message: 'Invalid OAuth access token', code: 190 },
+    });
   });
 
   it('logs a failed outcome when fetch itself rejects (network error)', async () => {

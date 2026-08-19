@@ -40,7 +40,12 @@ export interface SendCapiEventOptions {
   value?: number
   currency?: string
   testEventCode?: string | null
+  /** WhatsApp Business Account id, added to user_data when known. */
+  wabaId?: string | null
 }
+
+/** Identifies this integration to Meta on every CAPI request. */
+const PARTNER_AGENT = 'wacrm'
 
 interface MetaErrorResponse {
   error?: { message?: string; code?: number; type?: string }
@@ -52,22 +57,30 @@ export function hashPhoneForCapi(phone: string): string {
 }
 
 export async function sendCapiEvent(options: SendCapiEventOptions): Promise<void> {
+  const userData: Record<string, unknown> = {
+    ctwa_clid: options.ctwaClid,
+    ph: [options.hashedPhone],
+  }
+  if (options.wabaId) {
+    userData.whatsapp_business_account_id = options.wabaId
+  }
+
   const event: Record<string, unknown> = {
     event_name: options.eventName,
     event_time: options.eventTime,
     event_id: options.eventId,
     action_source: 'business_messaging',
     messaging_channel: 'whatsapp',
-    user_data: {
-      ctwa_clid: options.ctwaClid,
-      ph: [options.hashedPhone],
-    },
+    user_data: userData,
   }
   if (options.value !== undefined) {
     event.custom_data = { value: options.value, currency: options.currency }
   }
 
-  const body: Record<string, unknown> = { data: [event] }
+  const body: Record<string, unknown> = {
+    data: [event],
+    partner_agent: PARTNER_AGENT,
+  }
   if (options.testEventCode) {
     body.test_event_code = options.testEventCode
   }
@@ -96,14 +109,20 @@ export async function sendCapiEvent(options: SendCapiEventOptions): Promise<void
     throw err
   }
 
+  // Parse once for both paths. A 200 body still matters: Meta reports
+  // events_received / messages / fbtrace_id, and warnings ride in
+  // `messages` even when the HTTP request itself was accepted.
+  let responseData: unknown
+  try {
+    responseData = await response.json()
+  } catch {
+    // non-JSON body — leave undefined
+  }
+
   if (!response.ok) {
     let message = `Meta CAPI error: ${response.status}`
-    try {
-      const data = (await response.json()) as MetaErrorResponse
-      if (data.error?.message) message = data.error.message
-    } catch {
-      // non-JSON body — keep the status fallback
-    }
+    const metaError = (responseData as MetaErrorResponse | undefined)?.error
+    if (metaError?.message) message = metaError.message
     logCapiAttempt({
       datasetId: options.datasetId,
       url,
@@ -111,6 +130,7 @@ export async function sendCapiEvent(options: SendCapiEventOptions): Promise<void
       outcome: 'failed',
       httpStatus: response.status,
       error: message,
+      response: responseData,
     })
     throw new Error(message)
   }
@@ -121,5 +141,6 @@ export async function sendCapiEvent(options: SendCapiEventOptions): Promise<void
     body,
     outcome: 'success',
     httpStatus: response.status,
+    response: responseData,
   })
 }

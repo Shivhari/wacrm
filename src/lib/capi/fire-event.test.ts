@@ -28,6 +28,7 @@ const CONFIG = {
   capi_dataset_id: 'ds-1',
   capi_access_token: 'enc:token',
   capi_test_event_code: null as string | null,
+  waba_id: 'waba-1' as string | null,
 };
 
 /**
@@ -211,6 +212,7 @@ describe('fireCapiEvent success path', () => {
     expect(sent.eventName).toBe('Lead');
     expect(sent.ctwaClid).toBe('clid-1');
     expect(sent.testEventCode).toBe('TEST9');
+    expect(sent.wabaId).toBe('waba-1');
     expect(sent.hashedPhone).toMatch(/^[0-9a-f]{64}$/);
 
     const audit = state.inserted.find((r) => r.table === 'capi_events');
