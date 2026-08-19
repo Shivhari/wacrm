@@ -193,6 +193,21 @@ it's two lines, so set it up now and forget it.
 - [ ] Reboot test: `sudo reboot`, container comes back on its own (compose
       restart policy) and the site answers
 
+### CAPI payload log
+
+Every Meta CAPI fire attempt is appended (exact request body + outcome)
+as NDJSON to `/app/logs/capi.log` inside the container — the `capi-logs`
+named volume, so it survives rebuilds and redeploys. Inspect it with:
+
+```bash
+docker compose exec app cat /app/logs/capi.log        # whole file
+docker compose exec app tail -f /app/logs/capi.log    # follow live
+docker compose cp app:/app/logs/capi.log ./capi.log   # copy to host
+```
+
+Entries contain the hashed phone and `ctwa_clid` (never the access
+token). The path is set by `CAPI_LOG_PATH` in `docker-compose.yml`.
+
 ## 10 — Deploying updates
 
 ```bash

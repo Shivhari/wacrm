@@ -18,6 +18,8 @@ import { createHash } from 'crypto'
 
 import { normalizePhone } from '@/lib/whatsapp/phone-utils'
 
+import { logCapiAttempt } from './capi-logger'
+
 const META_API_VERSION = 'v21.0'
 const META_API_BASE = `https://graph.facebook.com/${META_API_VERSION}`
 
@@ -70,14 +72,29 @@ export async function sendCapiEvent(options: SendCapiEventOptions): Promise<void
     body.test_event_code = options.testEventCode
   }
 
-  const response = await fetch(`${META_API_BASE}/${options.datasetId}/events`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${options.accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  })
+  const url = `${META_API_BASE}/${options.datasetId}/events`
+
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${options.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Network error'
+    logCapiAttempt({
+      datasetId: options.datasetId,
+      url,
+      body,
+      outcome: 'failed',
+      error: message,
+    })
+    throw err
+  }
 
   if (!response.ok) {
     let message = `Meta CAPI error: ${response.status}`
@@ -87,6 +104,22 @@ export async function sendCapiEvent(options: SendCapiEventOptions): Promise<void
     } catch {
       // non-JSON body — keep the status fallback
     }
+    logCapiAttempt({
+      datasetId: options.datasetId,
+      url,
+      body,
+      outcome: 'failed',
+      httpStatus: response.status,
+      error: message,
+    })
     throw new Error(message)
   }
+
+  logCapiAttempt({
+    datasetId: options.datasetId,
+    url,
+    body,
+    outcome: 'success',
+    httpStatus: response.status,
+  })
 }

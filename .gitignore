@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# CAPI payload log (local dev default, see src/lib/capi/capi-logger.ts)
+/logs
+
 # debug
 npm-debug.log*
 yarn-debug.log*

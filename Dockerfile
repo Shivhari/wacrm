@@ -46,6 +46,11 @@ ENV NODE_ENV=production \
 
 RUN addgroup -S nextjs && adduser -S nextjs -G nextjs
 
+# CAPI payload log directory (see src/lib/capi/capi-logger.ts). Owned
+# by the runtime user so the named volume mounted here inherits
+# writable permissions on first use.
+RUN mkdir -p /app/logs && chown nextjs:nextjs /app/logs
+
 COPY --from=builder --chown=nextjs:nextjs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nextjs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nextjs /app/public ./public

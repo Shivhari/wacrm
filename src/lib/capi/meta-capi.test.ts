@@ -1,4 +1,12 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  logCapiAttempt: vi.fn(),
+}));
+
+vi.mock('./capi-logger', () => ({
+  logCapiAttempt: mocks.logCapiAttempt,
+}));
 
 import { hashPhoneForCapi, sendCapiEvent } from './meta-capi';
 
@@ -15,6 +23,10 @@ const BASE_OPTIONS = {
   hashedPhone: 'a'.repeat(64),
   eventTime: 1723958400,
 };
+
+beforeEach(() => {
+  mocks.logCapiAttempt.mockReset();
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -95,5 +107,52 @@ describe('sendCapiEvent', () => {
     );
 
     await expect(sendCapiEvent(BASE_OPTIONS)).rejects.toThrow('Meta CAPI error: 504');
+  });
+
+  it('logs the exact payload with a success outcome, never the token', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okResponse()));
+
+    await sendCapiEvent({ ...BASE_OPTIONS, testEventCode: 'TEST123' });
+
+    expect(mocks.logCapiAttempt).toHaveBeenCalledTimes(1);
+    const entry = mocks.logCapiAttempt.mock.calls[0][0];
+    expect(entry.datasetId).toBe('ds-123');
+    expect(entry.url).toBe('https://graph.facebook.com/v21.0/ds-123/events');
+    expect(entry.outcome).toBe('success');
+    expect(entry.httpStatus).toBe(200);
+    expect(entry.body.data[0].event_id).toBe(BASE_OPTIONS.eventId);
+    expect(entry.body.test_event_code).toBe('TEST123');
+    expect(JSON.stringify(entry)).not.toContain('token-abc');
+  });
+
+  it('logs the payload with a failed outcome and Meta error message', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ error: { message: 'Invalid OAuth access token', code: 190 } }),
+          { status: 401 }
+        )
+      )
+    );
+
+    await expect(sendCapiEvent(BASE_OPTIONS)).rejects.toThrow();
+
+    const entry = mocks.logCapiAttempt.mock.calls[0][0];
+    expect(entry.outcome).toBe('failed');
+    expect(entry.httpStatus).toBe(401);
+    expect(entry.error).toBe('Invalid OAuth access token');
+    expect(entry.body.data[0].user_data.ctwa_clid).toBe('clid-xyz');
+  });
+
+  it('logs a failed outcome when fetch itself rejects (network error)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNRESET')));
+
+    await expect(sendCapiEvent(BASE_OPTIONS)).rejects.toThrow('ECONNRESET');
+
+    const entry = mocks.logCapiAttempt.mock.calls[0][0];
+    expect(entry.outcome).toBe('failed');
+    expect(entry.httpStatus).toBeUndefined();
+    expect(entry.error).toBe('ECONNRESET');
   });
 });
