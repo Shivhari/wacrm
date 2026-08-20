@@ -3,6 +3,7 @@ import {
   INTERACTIVE_LIMITS,
   sendInteractiveButtons,
   sendInteractiveList,
+  sendTextMessage,
 } from "./meta-api";
 
 // All assertions in this file run BEFORE the network call. We stub fetch
@@ -20,6 +21,39 @@ const BASE_ARGS = {
   to: "1234567890",
   bodyText: "Body text",
 } as const;
+
+describe("sendTextMessage", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("asks Meta to render a link preview for URLs in the body", async () => {
+    let captured: unknown = null;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        captured = JSON.parse(String(init.body));
+        return new Response(
+          JSON.stringify({ messages: [{ id: "wamid.TEXT" }] }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    const result = await sendTextMessage({
+      phoneNumberId: "test-phone",
+      accessToken: "test-token",
+      to: "1234567890",
+      text: "See https://example.com",
+    });
+
+    expect(result).toEqual({ messageId: "wamid.TEXT" });
+    expect(captured).toMatchObject({
+      type: "text",
+      text: { body: "See https://example.com", preview_url: true },
+    });
+  });
+});
 
 describe("sendInteractiveButtons — validation", () => {
   beforeEach(() => {

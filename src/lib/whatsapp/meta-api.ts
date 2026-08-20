@@ -239,7 +239,7 @@ export async function sendTextMessage(
     recipient_type: 'individual',
     to,
     type: 'text',
-    text: { body: text },
+    text: { body: text, preview_url: true },
   }
   if (contextMessageId) {
     body.context = { message_id: contextMessageId }
