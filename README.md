@@ -154,6 +154,8 @@ Key pages:
 - [Deploy on Hostinger](https://wacrm.tech/docs/deployment-hostinger)
 - [Architecture](https://wacrm.tech/docs/architecture)
 - [Troubleshooting](https://wacrm.tech/docs/troubleshooting)
+- [Several WABAs on one deployment](./docs/multi-waba.md) — one Meta
+  App or several; how `META_APP_SECRET` takes a comma-separated list
 
 ## Stack
 
