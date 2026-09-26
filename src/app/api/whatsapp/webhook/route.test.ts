@@ -33,6 +33,10 @@ const h = vi.hoisted(() => ({
     contactsUpdateCalls: [] as { row: Record<string, unknown>; id: string }[],
     /** Error the next contacts update resolves with, if any. */
     contactsUpdateError: null as { message: string } | null,
+    /** Row the status mirror finds by whatsapp_message_id, if any. */
+    recipientRow: null as { id: string; status: string } | null,
+    /** Calls made to `broadcast_recipients`'s update() — the status mirror. */
+    recipientUpdateCalls: [] as { row: Record<string, unknown>; id: string }[],
   },
 }))
 
@@ -84,10 +88,10 @@ vi.mock('@supabase/supabase-js', () => ({
             }),
           }
         case 'broadcast_recipients':
-          // flagBroadcastReplyIfAny: select().eq().eq().in().order().limit()
           return {
             select: () => ({
               eq: () => ({
+                // flagBroadcastReplyIfAny: select().eq().eq().in().order().limit()
                 eq: () => ({
                   in: () => ({
                     order: () => ({
@@ -96,7 +100,16 @@ vi.mock('@supabase/supabase-js', () => ({
                     }),
                   }),
                 }),
+                // handleStatusUpdate: select('id, status').eq().maybeSingle()
+                maybeSingle: () =>
+                  Promise.resolve({ data: h.state.recipientRow, error: null }),
               }),
+            }),
+            update: (row: Record<string, unknown>) => ({
+              eq: (_col: string, id: string) => {
+                h.state.recipientUpdateCalls.push({ row, id })
+                return Promise.resolve({ error: null })
+              },
             }),
           }
         case 'messages':
@@ -116,9 +129,9 @@ vi.mock('@supabase/supabase-js', () => ({
                         }),
                     }),
                   }
-                : // lookupInternalIdByMetaId: select('id').eq().eq().maybeSingle()
-                  {
+                : {
                     eq: () => ({
+                      // lookupInternalIdByMetaId: select('id').eq().eq().maybeSingle()
                       eq: () => ({
                         maybeSingle: () =>
                           Promise.resolve({
@@ -126,8 +139,17 @@ vi.mock('@supabase/supabase-js', () => ({
                             error: null,
                           }),
                       }),
+                      // status fan-out: select(...).eq().limit().maybeSingle()
+                      limit: () => ({
+                        maybeSingle: () =>
+                          Promise.resolve({ data: null, error: null }),
+                      }),
                     }),
                   },
+            // handleStatusUpdate: update({status}).eq('message_id', id)
+            update: () => ({
+              eq: () => Promise.resolve({ error: null }),
+            }),
             // Idempotent insert: upsert(...).select('id')
             upsert: (row: Record<string, unknown>, options: unknown) => {
               h.state.upsertCalls.push({ row, options })
@@ -276,6 +298,8 @@ beforeEach(() => {
   h.state.storageUploadError = null
   h.state.contactsUpdateCalls = []
   h.state.contactsUpdateError = null
+  h.state.recipientRow = null
+  h.state.recipientUpdateCalls = []
   mockGetMediaUrl.mockResolvedValue({
     url: 'https://lookaside.fbsbx.com/whatsapp/abc',
     mimeType: 'image/jpeg',
@@ -606,5 +630,95 @@ describe('inbound webhook: after() awaits automations (#368)', () => {
     // If the dispatches were fire-and-forget, completed would still be 0
     // here — the callback would have resolved before the timers fired.
     expect(h.state.automationCompleted).toBe(3)
+  })
+})
+
+// ── Status webhooks ──────────────────────────────────────────────────
+
+function statusRequest(status: Record<string, unknown>) {
+  const body = {
+    entry: [
+      {
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              metadata: { phone_number_id: 'pn-1' },
+              statuses: [status],
+            },
+          },
+        ],
+      },
+    ],
+  }
+  return {
+    text: async () => JSON.stringify(body),
+    headers: { get: () => 'sha256=stub' },
+  } as unknown as Request
+}
+
+async function runStatusWebhook(status: Record<string, unknown>) {
+  const res = await POST(statusRequest(status))
+  for (const cb of h.state.afterCallbacks) await cb()
+  return res
+}
+
+describe('status webhook: failed delivery reason lands on the recipient', () => {
+  beforeEach(() => {
+    h.state.recipientRow = { id: 'rcpt-1', status: 'sent' }
+  })
+
+  it("stores Meta's error code + title + details as error_message", async () => {
+    await runStatusWebhook({
+      id: 'wamid.SENT1',
+      status: 'failed',
+      timestamp: '1700000000',
+      recipient_id: '919597000000',
+      errors: [
+        {
+          code: 131026,
+          title: 'Message undeliverable',
+          message: 'Message undeliverable.',
+          error_data: {
+            details:
+              'Message Undeliverable. Unable to deliver message. Reasons can include: The recipient phone number is not a WhatsApp phone number.',
+          },
+        },
+      ],
+    })
+
+    expect(h.state.recipientUpdateCalls).toHaveLength(1)
+    const { row, id } = h.state.recipientUpdateCalls[0]
+    expect(id).toBe('rcpt-1')
+    expect(row.status).toBe('failed')
+    expect(row.error_message).toBe(
+      '131026 Message undeliverable: Message Undeliverable. Unable to deliver message. Reasons can include: The recipient phone number is not a WhatsApp phone number.',
+    )
+  })
+
+  it('falls back to a generic reason when Meta sends no errors array', async () => {
+    await runStatusWebhook({
+      id: 'wamid.SENT1',
+      status: 'failed',
+      timestamp: '1700000000',
+      recipient_id: '919597000000',
+    })
+
+    expect(h.state.recipientUpdateCalls).toHaveLength(1)
+    expect(h.state.recipientUpdateCalls[0].row.error_message).toBe(
+      'Delivery failed (no reason given by Meta)',
+    )
+  })
+
+  it('does not touch error_message on a non-failed status', async () => {
+    await runStatusWebhook({
+      id: 'wamid.SENT1',
+      status: 'delivered',
+      timestamp: '1700000000',
+      recipient_id: '919597000000',
+    })
+
+    expect(h.state.recipientUpdateCalls).toHaveLength(1)
+    expect('error_message' in h.state.recipientUpdateCalls[0].row).toBe(false)
   })
 })

@@ -100,15 +100,49 @@ interface WhatsAppWebhookEntry {
         wa_id: string
       }>
       messages?: WhatsAppMessage[]
-      statuses?: Array<{
-        id: string
-        status: string
-        timestamp: string
-        recipient_id: string
-      }>
+      statuses?: WhatsAppStatus[]
     }
     field: string
   }>
+}
+
+/** One entry of a status webhook's `errors` array (Meta Cloud API). */
+interface WhatsAppStatusError {
+  code?: number
+  title?: string
+  message?: string
+  error_data?: { details?: string }
+}
+
+interface WhatsAppStatus {
+  id: string
+  status: string
+  timestamp: string
+  recipient_id: string
+  /** Present on `failed` statuses — why Meta could not deliver. */
+  errors?: WhatsAppStatusError[]
+}
+
+/**
+ * Collapse Meta's `errors` array into one human-readable line for
+ * `broadcast_recipients.error_message`, e.g.
+ * `131026 Message undeliverable: The recipient phone number is not a
+ * WhatsApp phone number.` Never returns an empty string.
+ */
+function formatStatusFailureReason(
+  errors: WhatsAppStatusError[] | undefined,
+): string {
+  const parts = (errors ?? [])
+    .map((e) => {
+      const head = [e.code, e.title ?? e.message].filter(Boolean).join(' ')
+      const details = e.error_data?.details
+      if (head && details) return `${head}: ${details}`
+      return head || details || ''
+    })
+    .filter(Boolean)
+  return parts.length > 0
+    ? parts.join('; ')
+    : 'Delivery failed (no reason given by Meta)'
 }
 
 // GET - Webhook verification
@@ -378,12 +412,7 @@ function isValidStatusTransition(current: string, incoming: string): boolean {
   return ii > ci
 }
 
-async function handleStatusUpdate(status: {
-  id: string
-  status: string
-  timestamp: string
-  recipient_id: string
-}) {
+async function handleStatusUpdate(status: WhatsAppStatus) {
   // 1) Mirror onto messages (legacy behavior) — Meta's status values
   //    already match the CHECK constraint on messages.status. No
   //    `.select()`: message_id is NOT unique (migration 009 — Meta ids
@@ -426,6 +455,12 @@ async function handleStatusUpdate(status: {
     if (status.status === 'sent' && !('sent_at' in update)) update.sent_at = tsIso
     if (status.status === 'delivered') update.delivered_at = tsIso
     if (status.status === 'read') update.read_at = tsIso
+    // A `failed` status carries Meta's reason in `errors` (e.g. 131026
+    // "not a WhatsApp number"). Without this the row flips to failed
+    // with error_message still null and the detail page shows "-".
+    if (status.status === 'failed') {
+      update.error_message = formatStatusFailureReason(status.errors)
+    }
 
     const { error: recUpdateErr } = await supabaseAdmin()
       .from('broadcast_recipients')
