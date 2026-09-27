@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { estimateAudienceCount } from '@/lib/broadcasts/audience-estimate';
+import type { AudienceConfig } from '@/lib/broadcasts/audience';
 import { MessageTemplate } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,12 +18,6 @@ import {
 } from '@/components/ui/dialog';
 import { ArrowLeft, Send, Loader2, Users, Save } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-
-interface AudienceConfig {
-  type: string;
-  tagIds?: string[];
-  csvContacts?: { phone: string; name?: string }[];
-}
 
 interface Step4Props {
   name: string;
@@ -48,40 +44,37 @@ export function Step4ScheduleSend({
 }: Step4Props) {
   const t = useTranslations('Broadcasts.wizard');
   const [showConfirm, setShowConfirm] = useState(false);
-  const [estimatedReach, setEstimatedReach] = useState<number>(0);
+  /** `null` = estimate unavailable (query failed); sending is blocked. */
+  const [estimatedReach, setEstimatedReach] = useState<number | null>(null);
   const [loadingReach, setLoadingReach] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     async function calculateReach() {
       setLoadingReach(true);
       try {
-        const supabase = createClient();
-
-        if (audience.type === 'all') {
-          const { count } = await supabase
-            .from('contacts')
-            .select('*', { count: 'exact', head: true });
-          setEstimatedReach(count ?? 0);
-        } else if (audience.type === 'tags' && audience.tagIds && audience.tagIds.length > 0) {
-          const { data: contactTags } = await supabase
-            .from('contact_tags')
-            .select('contact_id')
-            .in('tag_id', audience.tagIds);
-
-          const uniqueIds = new Set((contactTags ?? []).map((ct) => ct.contact_id));
-          setEstimatedReach(uniqueIds.size);
-        } else if (audience.type === 'csv' && audience.csvContacts) {
-          setEstimatedReach(audience.csvContacts.length);
-        } else {
-          setEstimatedReach(0);
-        }
+        // Same estimator as the audience step, so this number matches
+        // the one the user already saw (exclusion tags and custom-field
+        // audiences included — this step used to ignore both).
+        const n = await estimateAudienceCount(createClient(), audience);
+        if (!cancelled) setEstimatedReach(n ?? 0);
+      } catch (err) {
+        // Show "unavailable" and keep Send disabled rather than a stale
+        // or zero count in the confirm dialog.
+        console.error('Audience estimate failed:', err);
+        if (!cancelled) setEstimatedReach(null);
       } finally {
-        setLoadingReach(false);
+        if (!cancelled) setLoadingReach(false);
       }
     }
 
     calculateReach();
+    return () => {
+      cancelled = true;
+    };
   }, [audience]);
+
+  const reachLabel = estimatedReach === null ? '—' : estimatedReach.toLocaleString();
 
   const audienceLabel =
     audience.type === 'all'
@@ -132,7 +125,7 @@ export function Step4ScheduleSend({
               ) : (
                 <>
                   <Users className="h-3.5 w-3.5 text-primary" />
-                  <p className="font-medium text-foreground">{estimatedReach.toLocaleString()}</p>
+                  <p className="font-medium text-foreground">{reachLabel}</p>
                 </>
               )}
             </div>
@@ -191,7 +184,7 @@ export function Step4ScheduleSend({
           <DialogTrigger
             render={
               <Button
-                disabled={!name.trim() || isProcessing}
+                disabled={!name.trim() || isProcessing || loadingReach || estimatedReach === null}
                 className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               />
             }
@@ -204,7 +197,7 @@ export function Step4ScheduleSend({
               <DialogTitle className="text-popover-foreground">Confirm Broadcast</DialogTitle>
               <DialogDescription className="text-muted-foreground">
                 You are about to send this broadcast to{' '}
-                <span className="font-medium text-popover-foreground">{estimatedReach.toLocaleString()}</span>{' '}
+                <span className="font-medium text-popover-foreground">{reachLabel}</span>{' '}
                 contacts using the{' '}
                 <span className="font-medium text-popover-foreground">{template.name}</span> template.
                 This action cannot be undone.
