@@ -2,14 +2,17 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { estimateAudienceCount } from '@/lib/broadcasts/audience-estimate';
+import { countAudience } from '@/lib/broadcast-audience';
+import { parseBroadcastCsv } from '@/lib/broadcast-csv';
 import { CustomField, Tag } from '@/types';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 import {
   Users,
   Tags,
   Filter,
   Upload,
+  FileText,
   Loader2,
   ArrowRight,
   ArrowLeft,
@@ -92,7 +95,16 @@ export function Step2SelectAudience({
   const [loadingFields, setLoadingFields] = useState(false);
   const [estimatedCount, setEstimatedCount] = useState<number | null>(null);
   const [loadingCount, setLoadingCount] = useState(false);
-  const estimateSeq = useRef(0);
+  // The picked file's name, shown back to the user. The parsed rows
+  // themselves live on `audience.csvContacts` (owned by the wizard) so
+  // they survive stepping forward and back.
+  const [pickedCsvName, setPickedCsvName] = useState<string | null>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
+
+  const csvCount = audience.csvContacts?.length ?? 0;
+  // Only meaningful while the rows it produced are still in play —
+  // picking another audience type wipes `csvContacts`.
+  const csvFileName = csvCount > 0 ? pickedCsvName : null;
 
   // Tags are used both by the primary "Filter by Tags" audience type
   // AND by the exclude-list below — so always load once on mount.
@@ -130,25 +142,22 @@ export function Step2SelectAudience({
   }, [audience.type]);
 
   const fetchEstimatedCount = useCallback(async () => {
-    // Estimates are several paged reads now, so a fast typist can have
-    // two in flight; only the latest may write to state.
-    const seq = ++estimateSeq.current;
     setLoadingCount(true);
     try {
-      // Shared with the review step (and paged past PostgREST's row
-      // cap) so both screens show the same number the send will use.
-      const n = await estimateAudienceCount(createClient(), audience);
-      if (seq === estimateSeq.current) setEstimatedCount(n);
-    } catch (err) {
-      // Never leave the previous audience's number on screen.
-      console.error('Audience estimate failed:', err);
-      if (seq === estimateSeq.current) setEstimatedCount(null);
+      setEstimatedCount(
+        await countAudience(createClient(), {
+          type: audience.type,
+          tagIds: audience.tagIds,
+          customField: audience.customField,
+          csvContacts: audience.csvContacts,
+          excludeTagIds: audience.excludeTagIds,
+        }),
+      );
+    } catch {
+      setEstimatedCount(null);
     } finally {
-      if (seq === estimateSeq.current) setLoadingCount(false);
+      setLoadingCount(false);
     }
-    // Field-level deps: the parent rebuilds `audience` on every change,
-    // so depending on the object would refetch on unrelated renders.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     audience.type,
     audience.tagIds,
@@ -160,6 +169,39 @@ export function Step2SelectAudience({
   useEffect(() => {
     fetchEstimatedCount();
   }, [fetchEstimatedCount]);
+
+  async function handleCsvChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = e.target.files?.[0];
+    if (!selected) return;
+
+    const result = parseBroadcastCsv(await selected.text());
+
+    if (!result.ok) {
+      toast.error(
+        result.error === 'missing_phone_column'
+          ? t('selectAudience.errorCsvMissingPhone')
+          : t('selectAudience.errorCsvParse'),
+      );
+      // Clear the input so re-picking the same corrected file still
+      // fires `change` (the browser suppresses it for an identical value).
+      e.target.value = '';
+      setPickedCsvName(null);
+      onUpdate({ ...audience, csvContacts: undefined });
+      return;
+    }
+
+    // Rows without a leading `+` and country code were refused (issue
+    // #586). Say so, or a spreadsheet export that stripped the `+` looks
+    // like a mysteriously smaller audience.
+    if (result.invalid > 0) {
+      toast.warning(
+        t('selectAudience.csvInvalidPhones', { count: result.invalid }),
+      );
+    }
+
+    setPickedCsvName(selected.name);
+    onUpdate({ ...audience, csvContacts: result.contacts });
+  }
 
   function toggleTag(tagId: string) {
     const current = audience.tagIds ?? [];
@@ -339,6 +381,49 @@ export function Step2SelectAudience({
         </div>
       )}
 
+      {audience.type === 'csv' && (
+        <div className="space-y-3 rounded-xl border border-border bg-card/50 p-4">
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              {t('selectAudience.uploadCsv')}
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {t('selectAudience.csvFormatDesc')}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => csvInputRef.current?.click()}
+            className="group flex w-full flex-col items-center gap-2 rounded-lg border border-dashed border-border bg-muted/40 px-4 py-6 text-center transition-colors hover:border-primary/40 hover:bg-muted/70"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-muted-foreground group-hover:text-foreground">
+              {csvFileName ? (
+                <FileText className="h-5 w-5" />
+              ) : (
+                <Upload className="h-5 w-5" />
+              )}
+            </div>
+            <p className="text-sm text-foreground">
+              {csvFileName ?? t('selectAudience.uploadCsv')}
+            </p>
+            {csvCount > 0 && (
+              <p className="text-xs text-primary">
+                {t('selectAudience.csvContactsFound', { count: csvCount })}
+              </p>
+            )}
+          </button>
+
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleCsvChange}
+            className="hidden"
+          />
+        </div>
+      )}
+
       {/* Exclude list — applies regardless of audience type */}
       <div className="rounded-xl border border-border bg-card/50 p-4">
         <div className="mb-3 flex items-center gap-2">
@@ -377,11 +462,11 @@ export function Step2SelectAudience({
 
       {/* Audience Summary */}
       <div className="rounded-xl border border-border bg-card/50 p-4">
-        <p className="mb-2 text-sm font-medium text-foreground">Audience Summary</p>
+        <p className="mb-2 text-sm font-medium text-foreground">{t('selectAudience.audienceSummary')}</p>
         {loadingCount ? (
           <div className="flex items-center gap-2">
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            <span className="text-xs text-muted-foreground">Calculating…</span>
+            <span className="text-xs text-muted-foreground">{t('selectAudience.calculating')}</span>
           </div>
         ) : estimatedCount !== null ? (
           <div className="flex items-center gap-2">
@@ -389,11 +474,11 @@ export function Step2SelectAudience({
             <span className="text-sm text-foreground">
               {estimatedCount.toLocaleString()}
             </span>
-            <span className="text-xs text-muted-foreground">estimated recipients</span>
+            <span className="text-xs text-muted-foreground">{t('selectAudience.estimatedRecipients')}</span>
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Select an audience type to see the estimate.
+            {t('selectAudience.selectTypeForEstimate')}
           </p>
         )}
       </div>
