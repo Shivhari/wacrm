@@ -38,6 +38,12 @@ describe('hashPhoneForCapi', () => {
     expect(plain).toMatch(/^[0-9a-f]{64}$/);
     expect(hashPhoneForCapi('+370 639 49836')).toBe(plain);
   });
+
+  it('returns undefined when the contact has no phone digits (BSUID-only contact)', () => {
+    expect(hashPhoneForCapi('')).toBeUndefined();
+    expect(hashPhoneForCapi(null)).toBeUndefined();
+    expect(hashPhoneForCapi('+ -')).toBeUndefined();
+  });
 });
 
 describe('sendCapiEvent', () => {
@@ -69,6 +75,16 @@ describe('sendCapiEvent', () => {
     expect(body.data[0].user_data).not.toHaveProperty('whatsapp_business_account_id');
     // integration identifier always present at the root
     expect(body.partner_agent).toBe('wacrm');
+  });
+
+  it('omits ph entirely when the contact has no phone to hash (BSUID-only contact)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse());
+    vi.stubGlobal('fetch', fetchMock);
+
+    await sendCapiEvent({ ...BASE_OPTIONS, hashedPhone: undefined });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.data[0].user_data).toEqual({ ctwa_clid: 'clid-xyz' });
   });
 
   it('includes whatsapp_business_account_id in user_data when wabaId is provided', async () => {

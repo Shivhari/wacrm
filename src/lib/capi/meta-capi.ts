@@ -33,8 +33,13 @@ export interface SendCapiEventOptions {
   /** Dedupe key — a fresh uuid per fire attempt. */
   eventId: string
   ctwaClid: string
-  /** From hashPhoneForCapi(). */
-  hashedPhone: string
+  /**
+   * From hashPhoneForCapi(). Omitted for contacts that have no phone —
+   * WhatsApp business-scoped user IDs (migration 040) let a username-only
+   * sender exist with `phone = ''`, and a hash of '' would be a bogus
+   * match key. ctwa_clid is the primary key for CTWA matching anyway.
+   */
+  hashedPhone?: string
   /** Unix seconds. */
   eventTime: number
   value?: number
@@ -51,15 +56,22 @@ interface MetaErrorResponse {
   error?: { message?: string; code?: number; type?: string }
 }
 
-/** SHA-256 hex over the digits-only phone (Meta's `ph` normalization). */
-export function hashPhoneForCapi(phone: string): string {
-  return createHash('sha256').update(normalizePhone(phone)).digest('hex')
+/**
+ * SHA-256 hex over the digits-only phone (Meta's `ph` normalization), or
+ * undefined when there are no digits to hash.
+ */
+export function hashPhoneForCapi(phone: string | null | undefined): string | undefined {
+  const digits = normalizePhone(phone ?? '')
+  if (!digits) return undefined
+  return createHash('sha256').update(digits).digest('hex')
 }
 
 export async function sendCapiEvent(options: SendCapiEventOptions): Promise<void> {
   const userData: Record<string, unknown> = {
     ctwa_clid: options.ctwaClid,
-    ph: [options.hashedPhone],
+  }
+  if (options.hashedPhone) {
+    userData.ph = [options.hashedPhone]
   }
   if (options.wabaId) {
     userData.whatsapp_business_account_id = options.wabaId
