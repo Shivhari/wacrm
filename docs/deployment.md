@@ -221,6 +221,30 @@ the container — run them with the Supabase CLI (from anywhere linked to the
 project) before or right after deploying code that needs them:
 `supabase db push`.
 
+### Migration numbering for fork-only changes
+
+Upstream (`ArnasDon/wacrm`) numbers migrations sequentially (`040_…`,
+`041_…`). The Supabase CLI records an applied migration by that numeric
+prefix alone, so a fork-only migration that reuses the next number
+collides as soon as upstream ships its own. Fork-only migrations
+therefore use timestamp versions (`supabase migration new <name>`
+produces one), which sort after every upstream file.
+
+`040_capi_events.sql` was renamed to `20260819120000_capi_events.sql`
+in October 2026 for this reason. Any database that already applied it
+under the old name needs a one-time repair before the next `db push`,
+otherwise upstream's own `040` is skipped as "already applied":
+
+```bash
+supabase migration list                                    # remote shows 040 applied
+supabase migration repair --status reverted 040            # forget the record; no SQL runs
+supabase migration repair --status applied 20260819120000  # mark the renamed file applied
+supabase db push                                           # applies upstream 040..046
+```
+
+Never edit a migration file that also exists upstream; put fixes in a
+new timestamped migration instead.
+
 Watch the Supabase storage quota over time — inbound attachments are copied
 into the `chat-media` bucket (because Meta deletes media after ~30 days) and
 it grows with volume.

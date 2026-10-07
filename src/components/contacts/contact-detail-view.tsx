@@ -42,6 +42,8 @@ import {
   LayoutTemplate,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { contactHandle } from '@/lib/whatsapp/wa-identity';
+import { parseInternationalPhone } from '@/lib/whatsapp/phone-utils';
 
 interface ContactDetailViewProps {
   open: boolean;
@@ -193,7 +195,7 @@ export function ContactDetailView({
 
   async function copyPhone() {
     if (!contact) return;
-    await navigator.clipboard.writeText(contact.phone);
+    await navigator.clipboard.writeText(contactHandle(contact));
     setCopiedPhone(true);
     setTimeout(() => setCopiedPhone(false), 2000);
   }
@@ -201,6 +203,16 @@ export function ContactDetailView({
   async function saveDetails() {
     if (!contactId || !editPhone.trim()) {
       toast.error(t('toastPhoneRequired'));
+      return;
+    }
+
+    // Same rule as the create form: a changed number must start with `+`
+    // and a country code (issue #586). Unchanged numbers — including the
+    // digits-only form the inbound webhook stores — are left alone so a
+    // name/email edit is never blocked by the phone field.
+    const phoneChanged = editPhone.trim() !== (contact?.phone ?? '');
+    if (phoneChanged && !parseInternationalPhone(editPhone)) {
+      toast.error(t('toastPhoneNeedsCountryCode'));
       return;
     }
 
@@ -360,8 +372,8 @@ export function ContactDetailView({
 
       toast.success(t('toastTemplateSent', { name: template.name }));
     } catch (err) {
-      const reason = err instanceof Error ? err.message : 'network error';
-      toast.error(`Failed to send template: ${reason}`);
+      const reason = err instanceof Error ? err.message : t('networkError');
+      toast.error(t('toastTemplateFailed', { reason }));
     } finally {
       setSendingTemplate(false);
     }
@@ -411,7 +423,7 @@ export function ContactDetailView({
                       className="flex items-center gap-1 hover:text-primary transition-colors cursor-pointer"
                     >
                       <Phone className="size-3" />
-                      {contact.phone}
+                      {contactHandle(contact)}
                       {copiedPhone ? (
                         <Check className="size-3 text-primary" />
                       ) : (

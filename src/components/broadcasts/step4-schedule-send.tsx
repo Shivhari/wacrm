@@ -1,9 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { countAudience, type AudienceConfig } from '@/lib/broadcast-audience';
 import { createClient } from '@/lib/supabase/client';
-import { estimateAudienceCount } from '@/lib/broadcasts/audience-estimate';
-import type { AudienceConfig } from '@/lib/broadcasts/audience';
 import { MessageTemplate } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,37 +43,23 @@ export function Step4ScheduleSend({
 }: Step4Props) {
   const t = useTranslations('Broadcasts.wizard');
   const [showConfirm, setShowConfirm] = useState(false);
-  /** `null` = estimate unavailable (query failed); sending is blocked. */
-  const [estimatedReach, setEstimatedReach] = useState<number | null>(null);
+  const [estimatedReach, setEstimatedReach] = useState<number>(0);
   const [loadingReach, setLoadingReach] = useState(true);
 
   useEffect(() => {
-    let cancelled = false;
     async function calculateReach() {
       setLoadingReach(true);
       try {
-        // Same estimator as the audience step, so this number matches
-        // the one the user already saw (exclusion tags and custom-field
-        // audiences included — this step used to ignore both).
-        const n = await estimateAudienceCount(createClient(), audience);
-        if (!cancelled) setEstimatedReach(n ?? 0);
-      } catch (err) {
-        // Show "unavailable" and keep Send disabled rather than a stale
-        // or zero count in the confirm dialog.
-        console.error('Audience estimate failed:', err);
-        if (!cancelled) setEstimatedReach(null);
+        setEstimatedReach((await countAudience(createClient(), audience)) ?? 0);
+      } catch {
+        setEstimatedReach(0);
       } finally {
-        if (!cancelled) setLoadingReach(false);
+        setLoadingReach(false);
       }
     }
 
     calculateReach();
-    return () => {
-      cancelled = true;
-    };
   }, [audience]);
-
-  const reachLabel = estimatedReach === null ? '—' : estimatedReach.toLocaleString();
 
   const audienceLabel =
     audience.type === 'all'
@@ -118,20 +103,20 @@ export function Step4ScheduleSend({
             <p className="text-foreground">{audienceLabel}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Estimated Reach</p>
+            <p className="text-xs text-muted-foreground">{t('scheduleSend.estimatedReach')}</p>
             <div className="flex items-center gap-1.5">
               {loadingReach ? (
                 <Loader2 className="h-3 w-3 animate-spin text-primary" />
               ) : (
                 <>
                   <Users className="h-3.5 w-3.5 text-primary" />
-                  <p className="font-medium text-foreground">{reachLabel}</p>
+                  <p className="font-medium text-foreground">{estimatedReach.toLocaleString()}</p>
                 </>
               )}
             </div>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Language</p>
+            <p className="text-xs text-muted-foreground">{t('scheduleSend.language')}</p>
             <p className="text-foreground">{template.language ?? 'en_US'}</p>
           </div>
         </div>
@@ -184,7 +169,7 @@ export function Step4ScheduleSend({
           <DialogTrigger
             render={
               <Button
-                disabled={!name.trim() || isProcessing || loadingReach || estimatedReach === null}
+                disabled={!name.trim() || isProcessing}
                 className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               />
             }
@@ -194,13 +179,15 @@ export function Step4ScheduleSend({
           </DialogTrigger>
           <DialogContent className="border-border bg-popover sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="text-popover-foreground">Confirm Broadcast</DialogTitle>
+              <DialogTitle className="text-popover-foreground">{t('scheduleSend.confirmTitle')}</DialogTitle>
               <DialogDescription className="text-muted-foreground">
-                You are about to send this broadcast to{' '}
-                <span className="font-medium text-popover-foreground">{reachLabel}</span>{' '}
-                contacts using the{' '}
-                <span className="font-medium text-popover-foreground">{template.name}</span> template.
-                This action cannot be undone.
+                {t.rich('scheduleSend.confirmDesc', {
+                  count: estimatedReach,
+                  template: template.name,
+                  b: (chunks) => (
+                    <span className="font-medium text-popover-foreground">{chunks}</span>
+                  ),
+                })}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
