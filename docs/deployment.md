@@ -1,5 +1,8 @@
 # Deploying wacrm to a server (Docker + nginx)
 
+> Starting from nothing (new Supabase project, new Meta app, new server)?
+> Use [deployment-comprehensive.md](./deployment-comprehensive.md) instead.
+
 Runbook for moving the app off a dev machine + ngrok and onto a server as a
 Docker container, with a permanent HTTPS webhook URL for Meta. Placeholder
 used throughout: `wacrm.yetanother.site` — swap in the hostname you actually
@@ -120,6 +123,13 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
+
+        # Next.js RSC headers + the CSP header + Supabase sb-* Set-Cookie
+        # overflow nginx's default 4k proxy buffer → 502
+        # "upstream sent too big header". Give it room.
+        proxy_buffer_size 32k;
+        proxy_buffers 8 32k;
+        proxy_busy_buffers_size 64k;
     }
 }
 ```
@@ -203,6 +213,11 @@ named volume, so it survives rebuilds and redeploys. Inspect it with:
 docker compose exec app cat /app/logs/capi.log        # whole file
 docker compose exec app tail -f /app/logs/capi.log    # follow live
 docker compose cp app:/app/logs/capi.log ./capi.log   # copy to host
+docker compose exec app cat /app/logs/capi.log | jq . # pretty print
+docker compose exec app cat /app/logs/capi.log | jq 'select(.outcome=="failed")' # only failures
+docker compose exec app cat /app/logs/capi.log | jq 'select(.body.data[0].event_id=="<uuid>")' # find by event_id
+sudo cat "$(docker volume inspect wacrm_capi-logs -f '{{.Mountpoint}}')/capi.log" #Container down? Read volume direct:
+
 ```
 
 Entries contain the hashed phone and `ctwa_clid` (never the access
